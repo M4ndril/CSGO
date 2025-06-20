@@ -1,105 +1,105 @@
 #!/bin/bash
-mkdir -p "${STEAMAPPDIR}" || true  
 
-bash "${STEAMCMDDIR}/steamcmd.sh" +force_install_dir "${STEAMAPPDIR}" \
-				+login anonymous \
-				+app_update "${STEAMAPPID}" \
-				+quit
+# Define o caminho do diretório principal
+HOMEDIR="/home/steam"
+USER="steam" # Adiciona a variável USER aqui para ser usada no entry.sh
 
-# Are we in a metamod container and is the metamod folder missing?
-if  [ ! -z "$METAMOD_VERSION" ] && [ ! -d "${STEAMAPPDIR}/${STEAMAPP}/addons/metamod" ]; then
-	LATESTMM=$(wget -qO- https://mms.alliedmods.net/mmsdrop/"${METAMOD_VERSION}"/mmsource-latest-linux)
-	wget -qO- https://mms.alliedmods.net/mmsdrop/"${METAMOD_VERSION}"/"${LATESTMM}" | tar xvzf - -C "${STEAMAPPDIR}/${STEAMAPP}"	
+# Define o diretório de instalação do CS:GO
+STEAMAPPID=740
+STEAMAPP=csgo
+STEAMAPPDIR="${HOMEDIR}/${STEAMAPP}-dedicated"
+
+# Arquivo de atualização do SteamCMD
+STEAMCMD_UPDATE_FILE="${HOMEDIR}/${STEAMAPP}_update.txt"
+
+# Caminho completo para o executável srcds_run
+SRCDS_RUN="${STEAMAPPDIR}/srcds_run"
+
+# Logar o início do script e as variáveis
+echo "DEBUG: entry.sh started."
+echo "DEBUG: HOMEDIR=${HOMEDIR}"
+echo "DEBUG: STEAMAPPDIR=${STEAMAPPDIR}"
+echo "DEBUG: SRCDS_RUN=${SRCDS_RUN}"
+
+# Verificar se o diretório do jogo existe, caso contrário, criar
+if [ ! -d "${STEAMAPPDIR}" ]; then
+    echo "Creating game directory: ${STEAMAPPDIR}"
+    mkdir -p "${STEAMAPPDIR}"
+    # Definir permissões iniciais para o diretório
+    chown -R ${USER}:${USER} "${HOMEDIR}"
 fi
 
-# Are we in a sourcemod container and is the sourcemod folder missing?
-if  [ ! -z "$SOURCEMOD_VERSION" ] && [ ! -d "${STEAMAPPDIR}/${STEAMAPP}/addons/sourcemod" ]; then
-	LATESTSM=$(wget -qO- https://sm.alliedmods.net/smdrop/"${SOURCEMOD_VERSION}"/sourcemod-latest-linux)
-	wget -qO- https://sm.alliedmods.net/smdrop/"${SOURCEMOD_VERSION}"/"${LATESTSM}" | tar xvzf - -C "${STEAMAPPDIR}/${STEAMAPP}"
-fi
+# Gerar o arquivo de atualização do SteamCMD se não existir (ou sempre, para garantir)
+echo "@ShutdownOnFailedCommand 1" > "${STEAMCMD_UPDATE_FILE}"
+echo "@NoPromptForPassword 1" >> "${STEAMCMD_UPDATE_FILE}"
+echo "force_install_dir ${STEAMAPPDIR}" >> "${STEAMCMD_UPDATE_FILE}"
+echo "login anonymous" >> "${STEAMCMD_UPDATE_FILE}"
+echo "app_update ${STEAMAPPID}" >> "${STEAMCMD_UPDATE_FILE}"
+echo "quit" >> "${STEAMCMD_UPDATE_FILE}"
 
-# Is the config missing?
-if [ ! -f "${STEAMAPPDIR}/${STEAMAPP}/cfg/server.cfg" ]; then
-	# overwrite the base config files with the baked in ones
-	cp -r /etc/csgo/* "${STEAMAPPDIR}/${STEAMAPP}/cfg"
+# Certificar-se de que o arquivo de atualização pertence ao usuário steam
+chown ${USER}:${USER} "${STEAMCMD_UPDATE_FILE}"
 
-	# Change hostname on first launch (you can comment this out if it has done its purpose)
-	sed -i -e 's/{{SERVER_HOSTNAME}}/'"${SRCDS_HOSTNAME}"'/g' "${STEAMAPPDIR}/${STEAMAPP}/cfg/server.cfg"
-fi
+# Loop de atualização e inicialização do servidor
+while true; do
+    echo "$(date): Updating server using Steam."
+    echo "----------------------------"
 
-# Believe it or not, if you don't do this srcds_run shits itself
-cd "${STEAMAPPDIR}"
+    # Executar o SteamCMD para atualizar o jogo
+    # Redirecionar a entrada padrão para o arquivo de atualização
+    /usr/games/steamcmd +runscript "${STEAMCMD_UPDATE_FILE}"
+    
+    # ****************** ADICIONAR ESTA LINHA AQUI ******************
+    # Garantir que todos os binários dentro do diretório do jogo sejam executáveis
+    echo "DEBUG: Setting execute permissions for all files in ${STEAMAPPDIR}."
+    chmod -R +x "${STEAMAPPDIR}" # Isso irá definir a permissão de execução para todos os arquivos
 
-# Check if autoexec file exists
-# Passing arguments directly to srcds_run, ignores values set in autoexec.cfg
-autoexec_file="${STEAMAPPDIR}/${STEAMAPP}/cfg/autoexec.cfg"
+    echo "----------------------------"
 
-# Overwritable arguments
-ow_args=""
+    # Verificar se o srcds_run existe antes de tentar executá-lo
+    if [ ! -f "${SRCDS_RUN}" ]; then
+        echo "ERROR: ${SRCDS_RUN} not found! Cannot start server. Please check SteamCMD download."
+        echo "Will retry update in 10 seconds."
+        sleep 10
+        continue
+    fi
 
-# If you need to overwrite a specific launch argument, add it to this loop and drop it from the subsequent srcds_run call
-if [ -f "$autoexec_file" ]; then
-        # TAB delimited name    default
-        # HERE doc to not add extra file
-        while IFS=$'\t' read -r name default
-        do
-                if ! grep -q "^\s*$name" "$autoexec_file"; then
-                        ow_args="${ow_args} $default"
-                fi
-        done <<EOM
-sv_password	+sv_password "${SRCDS_PW}"
-rcon_password	+rcon_password "${SRCDS_RCONPW}"
-EOM
-	# if autoexec is present, drop overwritten arguments here (example: SRCDS_PW & SRCDS_RCONPW)
-	bash "${STEAMAPPDIR}/srcds_run" -game "${STEAMAPP}" -console -autoupdate \
-				-steam_dir "${STEAMCMDDIR}" \
-				-steamcmd_script "${HOMEDIR}/${STEAMAPP}_update.txt" \
-				-usercon \
-				+fps_max "${SRCDS_FPSMAX}" \
-				-tickrate "${SRCDS_TICKRATE}" \
-				-port "${SRCDS_PORT}" \
-				+tv_port "${SRCDS_TV_PORT}" \
-				+clientport "${SRCDS_CLIENT_PORT}" \
-				-maxplayers_override "${SRCDS_MAXPLAYERS}" \
-				+game_type "${SRCDS_GAMETYPE}" \
-				+game_mode "${SRCDS_GAMEMODE}" \
-				+mapgroup "${SRCDS_MAPGROUP}" \
-				+map "${SRCDS_STARTMAP}" \
-				+sv_setsteamaccount "${SRCDS_TOKEN}" \
-				+sv_region "${SRCDS_REGION}" \
-				+net_public_adr "${SRCDS_NET_PUBLIC_ADDRESS}" \
-				-ip "${SRCDS_IP}" \
-				+sv_lan "${SRCDS_LAN}" \
-				+host_workshop_collection "${SRCDS_HOST_WORKSHOP_COLLECTION}" \
-				+workshop_start_map "${SRCDS_WORKSHOP_START_MAP}" \
-				-authkey "${SRCDS_WORKSHOP_AUTHKEY}" \
-				"${ow_args}" \
-				"${ADDITIONAL_ARGS}"
-else
-	# If no autoexec is present, use all parameters
-	bash "${STEAMAPPDIR}/srcds_run" -game "${STEAMAPP}" -console -autoupdate \
-				-steam_dir "${STEAMCMDDIR}" \
-				-steamcmd_script "${HOMEDIR}/${STEAMAPP}_update.txt" \
-				-usercon \
-				+fps_max "${SRCDS_FPSMAX}" \
-				-tickrate "${SRCDS_TICKRATE}" \
-				-port "${SRCDS_PORT}" \
-				+tv_port "${SRCDS_TV_PORT}" \
-				+clientport "${SRCDS_CLIENT_PORT}" \
-				-maxplayers_override "${SRCDS_MAXPLAYERS}" \
-				+game_type "${SRCDS_GAMETYPE}" \
-				+game_mode "${SRCDS_GAMEMODE}" \
-				+mapgroup "${SRCDS_MAPGROUP}" \
-				+map "${SRCDS_STARTMAP}" \
-				+sv_setsteamaccount "${SRCDS_TOKEN}" \
-				+rcon_password "${SRCDS_RCONPW}" \
-				+sv_password "${SRCDS_PW}" \
-				+sv_region "${SRCDS_REGION}" \
-				+net_public_adr "${SRCDS_NET_PUBLIC_ADDRESS}" \
-				-ip "${SRCDS_IP}" \
-				+sv_lan "${SRCDS_LAN}" \
-				+host_workshop_collection "${SRCDS_HOST_WORKSHOP_COLLECTION}" \
-				+workshop_start_map "${SRCDS_WORKSHOP_START_MAP}" \
-				-authkey "${SRCDS_WORKSHOP_AUTHKEY}" \
-				"${ADDITIONAL_ARGS}"
-fi
+    echo "$(date): Starting SRCDS..."
+
+    # Iniciar o servidor CS:GO
+    # Certifique-se de que as variáveis de ambiente SRCDS_* estejam definidas no Dockerfile ou aqui
+    # Exemplo: (SRCDS_PORT, SRCDS_MAXPLAYERS, etc.)
+
+    # Navegar para o diretório do jogo para que o ./srcds_linux funcione corretamente
+    cd "${STEAMAPPDIR}" || { echo "Failed to change directory to ${STEAMAPPDIR}"; exit 1; }
+
+    # Executar o servidor de jogo
+    # Use 'exec' para substituir o processo bash pelo processo do srcds_run, o que é bom para Docker
+    exec "${SRCDS_RUN}" \
+        -console \
+        -autoupdate \
+        -steamcmd \
+        -strictportbind \
+        -ip "${SRCDS_IP}" \
+        -port "${SRCDS_PORT}" \
+        +clientport "${SRCDS_CLIENT_PORT}" \
+        +tv_port "${SRCDS_TV_PORT}" \
+        -maxplayers "${SRCDS_MAXPLAYERS}" \
+        -tickrate "${SRCDS_TICKRATE}" \
+        +game_type "${SRCDS_GAMETYPE}" \
+        +game_mode "${SRCDS_GAMEMODE}" \
+        +mapgroup "${SRCDS_MAPGROUP}" \
+        +map "${SRCDS_STARTMAP}" \
+        +sv_setsteamaccount "${SRCDS_TOKEN}" \
+        +rcon_password "${SRCDS_RCONPW}" \
+        +sv_password "${SRCDS_PW}" \
+        -net_public_address "${SRCDS_NET_PUBLIC_ADDRESS}" \
+        -authkey "${SRCDS_WORKSHOP_AUTHKEY}" \
+        +host_workshop_collection "${SRCDS_HOST_WORKSHOP_COLLECTION}" \
+        +workshop_start_map "${SRCDS_WORKSHOP_START_MAP}" \
+        ${ADDITIONAL_ARGS} # Adicione esta linha para passar argumentos adicionais
+
+    # Se o servidor parar (o comando 'exec' acima falhar ou o processo srcds_run sair)
+    echo "$(date): Server stopped. Restarting in 10 seconds."
+    sleep 10 # Tempo para o Docker reiniciar ou para o próximo loop
+done
