@@ -21,10 +21,10 @@ COPY bullseye/etc/csgo "/etc/csgo"
 RUN set -x \
 	# Instala, atualiza e faz upgrade de pacotes. Versões específicas foram removidas.
 	&& apt-get update \
-    	&& apt-get install -y --no-install-recommends --no-install-suggests \
-        wget \
-        ca-certificates \
-        lib32z1 \
+    && apt-get install -y --no-install-recommends --no-install-suggests \
+        wget \
+        ca-certificates \
+        lib32z1 \
 	&& mkdir -p "${STEAMAPPDIR}" \
 	# Adiciona o script de entrada
 	&& { \
@@ -34,7 +34,7 @@ RUN set -x \
 		echo 'login anonymous'; \
 		echo 'app_update '"${STEAMAPPID}"''; \
 		echo 'quit'; \
-	   } > "${HOMEDIR}/${STEAMAPP}_update.txt" \
+	   } > "${HOMEDIR}/${STEAMAPP}_update.txt" \
 	# Garante permissão de execução e o proprietário correto para o entry.sh
 	&& chmod +x "${HOMEDIR}/entry.sh" \
 	&& chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" "${HOMEDIR}/${STEAMAPP}_update.txt" \
