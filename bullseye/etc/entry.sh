@@ -47,7 +47,7 @@ while true; do
 
     # Executar o SteamCMD para atualizar o jogo
     # Redirecionar a entrada padrão para o arquivo de atualização
-    /usr/games/steamcmd +runscript "${STEAMCMD_UPDATE_FILE}"
+    "${HOMEDIR}/steamcmd/steamcmd.sh" +runscript "${STEAMCMD_UPDATE_FILE}"
     
     # ****************** ADICIONAR ESTA LINHA AQUI ******************
     # Garantir que todos os binários dentro do diretório do jogo sejam executáveis
