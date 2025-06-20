@@ -10,8 +10,8 @@ ENV STEAMAPP csgo
 ENV STEAMAPPDIR "${HOMEDIR}/${STEAMAPP}-dedicated"
 ENV DLURL https://raw.githubusercontent.com/CM2Walki/CSGO
 
-COPY etc/entry.sh "${HOMEDIR}/entry.sh"
-COPY etc/csgo "/etc/csgo"
+COPY bullseye/etc/entry.sh "${HOMEDIR}/entry.sh"
+COPY bullseye/etc/csgo "/etc/csgo"
 
 RUN set -x \
 	# Install, update & upgrade packages
