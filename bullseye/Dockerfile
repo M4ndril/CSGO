@@ -5,23 +5,28 @@ FROM cm2network/steamcmd:root as build_stage
 
 LABEL maintainer="walentinlamonos@gmail.com"
 
+# Definimos HOMEDIR e USER para que sejam reconhecidas durante a construção da imagem
+ENV HOMEDIR="/home/steam"
+ENV USER="steam"
+
 ENV STEAMAPPID 740
 ENV STEAMAPP csgo
 ENV STEAMAPPDIR "${HOMEDIR}/${STEAMAPP}-dedicated"
 ENV DLURL https://raw.githubusercontent.com/CM2Walki/CSGO
 
+# Copiamos os arquivos, agora o Docker reconhecerá o ${HOMEDIR} corretamente
 COPY bullseye/etc/entry.sh "${HOMEDIR}/entry.sh"
 COPY bullseye/etc/csgo "/etc/csgo"
 
 RUN set -x \
-	# Install, update & upgrade packages
+	# Instala, atualiza e faz upgrade de pacotes. Versões específicas foram removidas.
 	&& apt-get update \
-    	&& apt-get install -y --no-install-recommends --no-install-suggests \
-        wget \
-        ca-certificates \
-        lib32z1 \
+    	&& apt-get install -y --no-install-recommends --no-install-suggests \
+        wget \
+        ca-certificates \
+        lib32z1 \
 	&& mkdir -p "${STEAMAPPDIR}" \
-	# Add entry script
+	# Adiciona o script de entrada
 	&& { \
 		echo '@ShutdownOnFailedCommand 1'; \
 		echo '@NoPromptForPassword 1'; \
@@ -29,14 +34,16 @@ RUN set -x \
 		echo 'login anonymous'; \
 		echo 'app_update '"${STEAMAPPID}"''; \
 		echo 'quit'; \
-	   } > "${HOMEDIR}/${STEAMAPP}_update.txt" \
+	   } > "${HOMEDIR}/${STEAMAPP}_update.txt" \
+	# Garante permissão de execução e o proprietário correto para o entry.sh
 	&& chmod +x "${HOMEDIR}/entry.sh" \
 	&& chown -R "${USER}:${USER}" "${HOMEDIR}/entry.sh" "${STEAMAPPDIR}" "${HOMEDIR}/${STEAMAPP}_update.txt" \
-	# Clean up
-	&& rm -rf /var/lib/apt/lists/* 
+	# Limpeza
+	&& rm -rf /var/lib/apt/lists/* 
 
 FROM build_stage AS bullseye-base
 
+# Variáveis de ambiente para configuração do servidor CS:GO
 ENV SRCDS_FPSMAX=300 \
 	SRCDS_TICKRATE=128 \
 	SRCDS_PORT=27015 \
@@ -60,14 +67,16 @@ ENV SRCDS_FPSMAX=300 \
 	SRCDS_WORKSHOP_AUTHKEY="" \
 	ADDITIONAL_ARGS=""
 
-# Switch to user
+# Altera para o usuário especificado
 USER ${USER}
 
+# Define o diretório de trabalho. O CMD será executado a partir daqui.
 WORKDIR ${HOMEDIR}
 
-CMD ["bash", "entry.sh"]
+# Comando para iniciar o servidor. Usamos o caminho absoluto para garantir que seja encontrado.
+CMD ["bash", "${HOMEDIR}/entry.sh"]
 
-# Expose ports
+# Expõe as portas necessárias
 EXPOSE 27015/tcp \
 	27015/udp \
 	27020/udp
